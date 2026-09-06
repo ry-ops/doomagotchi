@@ -6,6 +6,7 @@ idf_component_register(
         "recv_wad.c"
         "kbd_usb.c"
         "kbd_m5kbd.c"
+        "autoplay.c"
     INCLUDE_DIRS "."
     REQUIRES doomgeneric esp_timer esp_psram fatfs esp_driver_usb_serial_jtag
              esp_lcd espressif__m5stack_tab5 esp_driver_ppa esp_mm espressif__esp_lcd_touch usb usb_host_hid esp_driver_i2c

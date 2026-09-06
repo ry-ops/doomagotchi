@@ -23,6 +23,7 @@
 
 #include "doomgeneric.h"
 #include "recv_wad.h"
+#include "autoplay.h"
 
 static const char *TAG = "doomagotchi";
 
@@ -58,6 +59,7 @@ static void doom_task(void *arg)
     report_heap("post-Create");
 
     for (;;) {
+        autoplay_step();
         doomgeneric_Tick();
         vTaskDelay(1);
     }
