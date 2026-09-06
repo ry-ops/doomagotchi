@@ -1,17 +1,38 @@
 # DOOM node — ESP32-P4 (M5Stack Tab5)
 CONFIG_IDF_TARGET="esp32p4"
 
-# DOOM does deep call chains in R_* / P_*; give the tic task real headroom.
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
+# --- M5Stack Tab5 board (values from the esp-bsp Tab5 example defconfig) ---
+CONFIG_BSP_SELECT_M5STACK_TAB5=y
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+# This Tab5 is a chip-rev v1.3 part; IDF v6.1 defaults the P4 to 400 MHz which
+# asserts in esp_clk_init (clk.c:105) on rev < v3. Pin to 360 MHz.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+CONFIG_CODEC_I2C_BACKWARD_COMPATIBLE=n
+CONFIG_CAM_CTRL_SPI_ENABLE=n
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 
-# ~1.5 MB app partition — the vendored engine is a lot of object code.
+# --- PSRAM (32 MB on the Tab5) ---
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_200M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+# Route any allocation >= 16 KiB to PSRAM automatically. This is what puts
+# DOOM's 6.00 MiB zone malloc and the 1.00 MiB DG_ScreenBuffer in PSRAM with
+# no code change (see the Phase 0 memory-map report).
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=131072
+
+# --- flash / partitions ---
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 
-# Size, not speed, until Phase 0 is green.
-CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+# --- SD / FATFS ---
+# "freedoom1.wad" is a long filename (>8.3); without this fopen() can't see it.
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
 
+# --- misc ---
+# DOOM does deep call chains in R_* / P_*; give the tic task headroom.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 # DOOM's tic rate is 35 Hz; 1 kHz FreeRTOS tick gives clean DG_SleepMs math.
 CONFIG_FREERTOS_HZ=1000
-
-# PSRAM for the zone allocator gets configured once Phase 0's memory map tells
-# us how big the zone needs to be (deliberately deferred — see CLAUDE.md).

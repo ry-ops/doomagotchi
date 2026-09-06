@@ -4,7 +4,7 @@ idf_component_register(
         "doomgeneric_esp32p4.c"
         "compat_newlib.c"
     INCLUDE_DIRS "."
-    REQUIRES doomgeneric esp_timer
+    REQUIRES doomgeneric esp_timer esp_psram fatfs
     # The vendored doomgeneric archive pulls DG_* / system() from here; force
     # every object in this component to link so archive scan order can't drop
     # doomgeneric_esp32p4.o or compat_newlib.o.

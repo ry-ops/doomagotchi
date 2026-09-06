@@ -1,0 +1,7 @@
+## doom-node/main dependencies
+## The M5Stack Tab5 BSP brings up PSRAM, the MIPI-DSI panel (ili9881c), SD,
+## backlight, touch, IMU. We use its low-level handles (bsp_display_new,
+## bsp_sdcard_mount) — not its LVGL layer.
+dependencies:
+  idf: ">=5.4"
+  espressif/m5stack_tab5: "*"
