@@ -19,6 +19,7 @@
 #include "esp_heap_caps.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_mipi_dsi.h"
+#include "driver/ppa.h"
 
 #include "bsp/display.h"
 #include "bsp/m5stack_tab5.h"
@@ -26,7 +27,11 @@
 static const char *TAG = "DG";
 
 static esp_lcd_panel_handle_t s_panel;
-static uint16_t *s_rgb565;   // DOOMGENERIC_RESX*RESY, PSRAM
+static uint16_t *s_fb;       // the DPI panel's real framebuffer, 720x1280 RGB565
+static ppa_client_handle_t s_ppa;
+
+#define PANEL_W  720   // BSP_LCD_H_RES  (native portrait)
+#define PANEL_H  1280  // BSP_LCD_V_RES
 
 void DG_Init(void)
 {
@@ -51,27 +56,65 @@ void DG_Init(void)
     esp_err_t br = bsp_display_brightness_set(90);
     ESP_LOGI(TAG, "backlight on, brightness_set -> %s", esp_err_to_name(br));
 
-    s_rgb565 = heap_caps_malloc((size_t)DOOMGENERIC_RESX * DOOMGENERIC_RESY * 2,
-                                MALLOC_CAP_SPIRAM);
-    ESP_LOGI(TAG, "panel up (%dx%d), rgb565 scratch %p", BSP_LCD_H_RES, BSP_LCD_V_RES, s_rgb565);
+    // Work straight in the DPI panel's own framebuffer (num_fbs = 1, PSRAM,
+    // continuously scanned out) rather than esp_lcd_panel_draw_bitmap().
+    void *fb = NULL;
+    esp_err_t fe = esp_lcd_dpi_panel_get_frame_buffer(s_panel, 1, &fb);
+    s_fb = (uint16_t *)fb;
+    ESP_LOGI(TAG, "panel up (%dx%d), framebuffer=%p (%s)", PANEL_W, PANEL_H, fb, esp_err_to_name(fe));
+
+    ppa_client_config_t pc = { .oper_type = PPA_OPERATION_SRM };
+    esp_err_t pe = ppa_register_client(&pc, &s_ppa);
+    ESP_LOGI(TAG, "ppa_register_client -> %s", esp_err_to_name(pe));
+
+    if (s_fb) {
+        for (int i = 0; i < PANEL_W * PANEL_H; i++) {
+            s_fb[i] = 0x0000;
+        }
+    }
 }
 
 void DG_DrawFrame(void)
 {
-    if (!s_panel || !s_rgb565) {
+    if (!s_fb || !s_ppa) {
         return;
     }
 
-    // DG_ScreenBuffer is XRGB8888 (i_video.c: red_off 16, green_off 8, blue_off 0).
-    const uint32_t *src = (const uint32_t *)DG_ScreenBuffer;
-    const int n = DOOMGENERIC_RESX * DOOMGENERIC_RESY;
-    for (int i = 0; i < n; i++) {
-        uint32_t p = src[i];
-        s_rgb565[i] = (uint16_t)(((p >> 8) & 0xF800) | ((p >> 5) & 0x07E0) | ((p >> 3) & 0x001F));
-    }
+    // Hardware rotate + scale + XRGB8888->RGB565 via the PPA (the software path
+    // was ~400 ms/frame from strided PSRAM reads). DG_ScreenBuffer is landscape
+    // RESX x RESY XRGB8888; PPA rotates 90 CCW ("left") and scales to fill the
+    // native-portrait 720x1280 panel. After 90 CCW: out_w = RESY*scale_y,
+    // out_h = RESX*scale_x.
+    int64_t t0 = esp_timer_get_time();
 
-    // First pass: straight 1:1 into the top-left of the (portrait) panel.
-    esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DOOMGENERIC_RESX, DOOMGENERIC_RESY, s_rgb565);
+    ppa_srm_oper_config_t op = {
+        .in = {
+            .buffer          = DG_ScreenBuffer,
+            .pic_w           = DOOMGENERIC_RESX,
+            .pic_h           = DOOMGENERIC_RESY,
+            .block_w         = DOOMGENERIC_RESX,
+            .block_h         = DOOMGENERIC_RESY,
+            .srm_cm          = PPA_SRM_COLOR_MODE_ARGB8888,
+        },
+        .out = {
+            .buffer          = s_fb,
+            .buffer_size     = (size_t)PANEL_W * PANEL_H * 2,
+            .pic_w           = PANEL_W,
+            .pic_h           = PANEL_H,
+            .srm_cm          = PPA_SRM_COLOR_MODE_RGB565,
+        },
+        .rotation_angle = PPA_SRM_ROTATION_ANGLE_90,
+        .scale_x = (float)PANEL_H / DOOMGENERIC_RESX,   // 1280/640 = 2.0
+        .scale_y = (float)PANEL_W / DOOMGENERIC_RESY,   //  720/400 = 1.8
+        .mode    = PPA_TRANS_MODE_BLOCKING,
+    };
+    esp_err_t e = ppa_do_scale_rotate_mirror(s_ppa, &op);
+
+    static uint32_t fr;
+    if ((++fr & 63) == 0) {
+        ESP_LOGI(TAG, "DG_DrawFrame ppa: %lld us (%s)",
+                 (long long)(esp_timer_get_time() - t0), esp_err_to_name(e));
+    }
 }
 
 void DG_SleepMs(uint32_t ms)
