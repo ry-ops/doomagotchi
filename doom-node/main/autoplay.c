@@ -89,6 +89,9 @@ static boolean type_str_step(void)
     return true;
 }
 
+// Nearest monster we actually have line of sight to (P_CheckSight is DOOM's
+// own visibility test - we only read it). Chasing a monster we can't see just
+// means walking into the wall it's behind.
 static mobj_t *nearest_monster(mobj_t *me, fixed_t *out_dist)
 {
     mobj_t *best = NULL;
@@ -108,10 +111,14 @@ static mobj_t *nearest_monster(mobj_t *me, fixed_t *out_dist)
             continue;
         }
         fixed_t d = P_AproxDistance(m->x - me->x, m->y - me->y);
-        if (d < bestd) {
-            bestd = d;
-            best = m;
+        if (d >= bestd) {
+            continue;
         }
+        if (!P_CheckSight(me, m)) {
+            continue;
+        }
+        bestd = d;
+        best = m;
     }
     if (out_dist) {
         *out_dist = bestd;
@@ -151,21 +158,56 @@ void autoplay_step(void)
     }
 
 #if GODMODE_ON_START
-    if (!did_god) {
+    static int god_stage;
+    if (god_stage < 2) {
         if (!s_type) {
-            s_type = "iddqd";
+            s_type = (god_stage == 0) ? "iddqd" : "idkfa";
         }
         if (type_str_step()) {
             return;
         }
-        did_god = true;
-        ESP_LOGI(TAG, "autoplayer: god mode requested, taking over E1M1");
+        god_stage++;
+        if (god_stage == 2) {
+            ESP_LOGI(TAG, "autoplayer: iddqd + idkfa done, taking over E1M1");
+        }
+        return;
+    }
+    (void)did_god;
+    // periodic ammo/armor top-up so a long run doesn't dry out
+    if ((tic % 3000) == 0 && !s_type) {
+        s_type = "idfa";
+    }
+    if (s_type && type_str_step()) {
+        return;
     }
 #endif
 
     mobj_t *me = pl->mo;
     fixed_t tdist = 0;
     mobj_t *tgt = nearest_monster(me, &tdist);
+
+    // Give up on a target we're not making progress against (blocked path):
+    // suppress hunting for a bit and wander/hard-turn out.
+    static fixed_t best_tdist;
+    static uint32_t progress_tic;
+    static uint32_t giveup_until;
+    if (tgt) {
+        if (tdist + (48 * FRACUNIT) < best_tdist || progress_tic == 0) {
+            best_tdist = tdist;
+            progress_tic = tic;
+        } else if (tic - progress_tic > 150) {
+            giveup_until = tic + 210;
+            progress_tic = tic;
+            best_tdist = 0x7fffffff;
+            ESP_LOGI(TAG, "tic=%lu: no progress on target, backing off", (unsigned long)tic);
+        }
+    } else {
+        best_tdist = 0x7fffffff;
+        progress_tic = 0;
+    }
+    if (tic < giveup_until) {
+        tgt = NULL;   // force wander this window
+    }
 
     boolean want[K_N] = { 0 };
 
@@ -207,10 +249,11 @@ void autoplay_step(void)
         sx = me->x;
         sy = me->y;
     }
-    if (tic < hard_turn_until) {
+    if (tic < hard_turn_until || tic < giveup_until) {
         want[K_LEFT] = true;
         want[K_RIGHT] = false;
-        want[K_FWD] = true;
+        want[K_FWD] = (tic < giveup_until);   // turn in place a bit when blocked
+        want[K_FIRE] = false;
     }
 
     apply(want);
