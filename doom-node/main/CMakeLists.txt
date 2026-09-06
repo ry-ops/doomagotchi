@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "doomgeneric_esp32p4.c"
+        "compat_newlib.c"
+    INCLUDE_DIRS "."
+    REQUIRES doomgeneric esp_timer
+    # The vendored doomgeneric archive pulls DG_* / system() from here; force
+    # every object in this component to link so archive scan order can't drop
+    # doomgeneric_esp32p4.o or compat_newlib.o.
+    WHOLE_ARCHIVE)

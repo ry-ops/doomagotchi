@@ -1,0 +1,17 @@
+# DOOM node — ESP32-P4 (M5Stack Tab5)
+CONFIG_IDF_TARGET="esp32p4"
+
+# DOOM does deep call chains in R_* / P_*; give the tic task real headroom.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
+
+# ~1.5 MB app partition — the vendored engine is a lot of object code.
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Size, not speed, until Phase 0 is green.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# DOOM's tic rate is 35 Hz; 1 kHz FreeRTOS tick gives clean DG_SleepMs math.
+CONFIG_FREERTOS_HZ=1000
+
+# PSRAM for the zone allocator gets configured once Phase 0's memory map tells
+# us how big the zone needs to be (deliberately deferred — see CLAUDE.md).
