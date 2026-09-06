@@ -48,7 +48,7 @@ bool kbd_usb_poll(int *pressed, unsigned char *key)
 
 // HID keyboard usage id -> DOOM key. Letters/digits stay ASCII (lowercase) so
 // the engine's cheat/menu responders see them directly.
-static unsigned char map_hid(uint8_t uc)
+unsigned char kbd_hid_usage_to_doom(unsigned char uc)
 {
     if (uc >= HID_KEY_A && uc <= HID_KEY_Z) {
         return (unsigned char)('a' + (uc - HID_KEY_A));
@@ -106,13 +106,13 @@ static void iface_cb(hid_host_device_handle_t dh,
 
     for (int i = 0; i < 6; i++) {
         if (prev[i] > HID_KEY_ERROR_UNDEFINED && !memchr(cur, prev[i], 6)) {
-            unsigned char k = map_hid(prev[i]);
+            unsigned char k = kbd_hid_usage_to_doom(prev[i]);
             if (k) { q_push(0, k); }
         }
     }
     for (int i = 0; i < 6; i++) {
         if (cur[i] > HID_KEY_ERROR_UNDEFINED && !memchr(prev, cur[i], 6)) {
-            unsigned char k = map_hid(cur[i]);
+            unsigned char k = kbd_hid_usage_to_doom(cur[i]);
             if (k) { q_push(1, k); }
         }
     }

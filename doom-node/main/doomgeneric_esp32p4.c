@@ -29,7 +29,7 @@
 #include "bsp/m5stack_tab5.h"
 
 #include "kbd_usb.h"
-#include "kbd_tca8418.h"
+#include "kbd_m5kbd.h"
 
 static const char *TAG = "DG";
 
@@ -94,7 +94,7 @@ void DG_Init(void)
     ESP_LOGI(TAG, "bsp_touch_new -> %s", esp_err_to_name(te));
 
     kbd_usb_start();      // USB HID keyboard on the USB-A host port
-    kbd_tca8418_start(); // official Tab5 pin-connector keyboard (cheats work either way)
+    kbd_m5kbd_start();   // official M5 Tab5 keyboard (A164, I2C 0x6D, HID mode)
 }
 
 void DG_DrawFrame(void)
@@ -181,7 +181,7 @@ static void poll_touch(void)
 
 int DG_GetKey(int *pressed, unsigned char *key)
 {
-    if (kbd_usb_poll(pressed, key) || kbd_tca8418_poll(pressed, key)) {
+    if (kbd_usb_poll(pressed, key) || kbd_m5kbd_poll(pressed, key)) {
         return 1;   // a real keyboard (incl. cheat codes) takes priority
     }
 
