@@ -28,6 +28,9 @@
 #include "bsp/touch.h"
 #include "bsp/m5stack_tab5.h"
 
+#include "kbd_usb.h"
+#include "kbd_tca8418.h"
+
 static const char *TAG = "DG";
 
 static esp_lcd_panel_handle_t s_panel;
@@ -89,6 +92,9 @@ void DG_Init(void)
 
     esp_err_t te = bsp_touch_new(NULL, &s_tp);
     ESP_LOGI(TAG, "bsp_touch_new -> %s", esp_err_to_name(te));
+
+    kbd_usb_start();      // USB HID keyboard on the USB-A host port
+    kbd_tca8418_start(); // official Tab5 pin-connector keyboard (cheats work either way)
 }
 
 void DG_DrawFrame(void)
@@ -175,6 +181,10 @@ static void poll_touch(void)
 
 int DG_GetKey(int *pressed, unsigned char *key)
 {
+    if (kbd_usb_poll(pressed, key) || kbd_tca8418_poll(pressed, key)) {
+        return 1;   // a real keyboard (incl. cheat codes) takes priority
+    }
+
     static int64_t s_last_poll;
     int64_t now = esp_timer_get_time();
     if (now - s_last_poll > 15000) {   // ~66 Hz touch poll

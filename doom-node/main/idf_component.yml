@@ -5,3 +5,4 @@
 dependencies:
   idf: ">=5.4"
   espressif/m5stack_tab5: "*"
+  usb_host_hid: "^1.0"
