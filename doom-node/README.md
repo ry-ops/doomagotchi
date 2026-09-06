@@ -27,8 +27,17 @@ mode" — run `python ../tools/send-wad.py /dev/cu.usbmodem1101 ../assets/freedo
 - [x] `DG_DrawFrame`: DPI framebuffer + PPA HW rotate(90 CCW)/scale/XRGB→RGB565,
       full-screen 720×1280, ~19 ms/frame
 - [x] `DG_GetTicksMs` / `DG_SleepMs` → `esp_timer` / FreeRTOS
-- [x] `DG_GetKey`: GT911/ST7123 touch zones → move / turn / fire / use
-- [x] E1M1 renders, playable (~15 tics/s end to end), stable, no leak
+- [x] `DG_GetKey`: three sources merged —
+      touch zones (GT911/ST7123), USB HID keyboard (USB-A host port), and the
+      **official M5 Tab5 Keyboard (A164)**: STM32 keypad @ I2C `0x6D` on
+      GPIO 0/1, driven in HID mode. DOOM's own cheat responder means
+      `iddqd` / `idkfa` / `idclevXX` work with no extra code.
+- [x] E1M1 renders, playable (~15 tics/s end to end), stable, no leak —
+      first level completed by hand on the keyboard
+
+The A164's event stream is one-key-at-a-time (release = HID usage 0), so
+forward+turn can't be held together. Fine for now; Phase 1's autoplayer
+doesn't use `DG_GetKey`.
 
 Runtime footprint: 6.00 MiB zone + 1.00 MiB `DG_ScreenBuffer` + ~1.8 MiB DPI
 framebuffer, all PSRAM (23 MiB free). Internal SRAM ~170 KiB free.

@@ -107,8 +107,6 @@ static void kb_task(void *arg)
             if (ev[0] == 0xFF && ev[1] == 0xFF) { break; }  // empty
 
             uint8_t mod = ev[0], kc = ev[1];
-            ESP_LOGI(TAG, "hid ev: mod=0x%02x usage=0x%02x -> doom=0x%02x",
-                     mod, kc, kbd_hid_usage_to_doom(kc));
             diff_mods(prev_mod, mod);
             prev_mod = mod;
 
