@@ -57,13 +57,8 @@ static void doom_task(void *arg)
     ESP_LOGI(TAG, "doomgeneric_Create returned - entering tick loop");
     report_heap("post-Create");
 
-    uint32_t frame = 0;
     for (;;) {
         doomgeneric_Tick();
-        if ((++frame % 35) == 0) {
-            ESP_LOGI(TAG, "tick %lu  (internal free %u KiB)", (unsigned long)frame,
-                     (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024));
-        }
         vTaskDelay(1);
     }
 }
@@ -103,7 +98,7 @@ void app_main(void)
 
 idle:
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        vTaskDelay(pdMS_TO_TICKS(60000));
         report_heap("idle");
     }
 }

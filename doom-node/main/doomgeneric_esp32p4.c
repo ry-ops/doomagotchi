@@ -101,9 +101,7 @@ void DG_DrawFrame(void)
     // was ~400 ms/frame from strided PSRAM reads). DG_ScreenBuffer is landscape
     // RESX x RESY XRGB8888; PPA rotates 90 CCW ("left") and scales to fill the
     // native-portrait 720x1280 panel. After 90 CCW: out_w = RESY*scale_y,
-    // out_h = RESX*scale_x.
-    int64_t t0 = esp_timer_get_time();
-
+    // out_h = RESX*scale_x. ~19 ms/frame on this P4.
     ppa_srm_oper_config_t op = {
         .in = {
             .buffer          = DG_ScreenBuffer,
@@ -126,11 +124,9 @@ void DG_DrawFrame(void)
         .mode    = PPA_TRANS_MODE_BLOCKING,
     };
     esp_err_t e = ppa_do_scale_rotate_mirror(s_ppa, &op);
-
-    static uint32_t fr;
-    if ((++fr & 63) == 0) {
-        ESP_LOGI(TAG, "DG_DrawFrame ppa: %lld us (%s)",
-                 (long long)(esp_timer_get_time() - t0), esp_err_to_name(e));
+    if (e != ESP_OK) {
+        static bool warned;
+        if (!warned) { warned = true; ESP_LOGW(TAG, "ppa SRM: %s", esp_err_to_name(e)); }
     }
 }
 
@@ -174,13 +170,6 @@ static void poll_touch(void)
         else if (hy < 0.45f)   z = ZU;
         else                   z = ZD;
         s_held[z] = true;
-
-        static int64_t s_last_log;
-        int64_t now = esp_timer_get_time();
-        if (now - s_last_log > 120000) {
-            ESP_LOGI(TAG, "touch native=(%u,%u) hx=%.2f hy=%.2f zone=%d", tx[p], ty[p], hx, hy, z);
-            s_last_log = now;
-        }
     }
 }
 

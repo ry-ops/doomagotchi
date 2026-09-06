@@ -1,26 +1,43 @@
 # doom-node — DOOMAGOTCHI renderer (M5Stack Tab5 / ESP32-P4)
 
 Runs **unmodified** `doomgeneric` (vendored at `third_party/doomgeneric/`, ADR 0001).
-Our code is `main/doomgeneric_esp32p4.c` (the six `DG_*` functions) plus CMake glue.
+Our code is `main/doomgeneric_esp32p4.c` (the six `DG_*` functions) plus glue.
 
-## Build
+## Build & flash
 
 ```sh
 git submodule update --init --recursive        # from repo root
 . $IDF_PATH/export.sh                           # ESP-IDF v6.1+
 cd doom-node
 idf.py set-target esp32p4
-idf.py build
-idf.py size            # <- Phase 0 deliverable: DOOM's static footprint
+idf.py -p /dev/cu.usbmodem1101 flash monitor
 ```
 
-## Phase 0 status
+First boot with no `/sdcard/freedoom1.wad`: the firmware enters "WAD receive
+mode" — run `python ../tools/send-wad.py /dev/cu.usbmodem1101 ../assets/freedoom1.wad`
+(needs pyserial), it writes the IWAD to the SD over the console and reboots.
+
+## Phase 0 — DONE ✅
+
+**Gate: Freedoom is playable on the Tab5 by hand.**
 
 - [x] `doomgeneric` vendored as submodule, unmodified
-- [x] ESP-IDF project builds and links against it (`app_main` pins the engine in)
-- [ ] Freedoom IWAD on SD, loaded via a `DG_`/VFS file shim
-- [ ] `DG_DrawFrame` blits `DG_ScreenBuffer` to the MIPI-DSI panel
-- [x] `DG_GetTicksMs` / `DG_SleepMs` wired to FreeRTOS / `esp_timer`
-- [ ] E1M1 renders, playable, stable framerate
+- [x] ESP-IDF project builds and links (esp32p4, chip rev v1.3 @ 360 MHz)
+- [x] Freedoom IWAD on SD, loaded via `fopen` on `/sdcard/freedoom1.wad`
+- [x] `DG_DrawFrame`: DPI framebuffer + PPA HW rotate(90 CCW)/scale/XRGB→RGB565,
+      full-screen 720×1280, ~19 ms/frame
+- [x] `DG_GetTicksMs` / `DG_SleepMs` → `esp_timer` / FreeRTOS
+- [x] `DG_GetKey`: GT911/ST7123 touch zones → move / turn / fire / use
+- [x] E1M1 renders, playable (~15 tics/s end to end), stable, no leak
 
-The engine is linked but not invoked yet — see the comment in `main/app_main.c`.
+Runtime footprint: 6.00 MiB zone + 1.00 MiB `DG_ScreenBuffer` + ~1.8 MiB DPI
+framebuffer, all PSRAM (23 MiB free). Internal SRAM ~170 KiB free.
+
+## Notes / follow-ups
+
+- `-warp 1 1` in `app_main.c` jumps straight to E1M1 (skips title/demo).
+- `esp_lcd_touch_get_coordinates` is deprecated (removed in touch comp 2.0);
+  swap for `esp_lcd_touch_get_data` on a later pass.
+- `idf.py build` sometimes doesn't notice edits — `touch main/<file>.c` first.
+- Framerate: `doomgeneric` is built `-Os`; `-O2` + PPA non-blocking are the
+  obvious wins if Phase 1's autoplayer wants it smoother.
