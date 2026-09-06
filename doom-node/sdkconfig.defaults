@@ -30,6 +30,12 @@ CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 CONFIG_FATFS_LFN_HEAP=y
 CONFIG_FATFS_MAX_LFN=255
 
+# --- console ---
+# The Tab5 USB-C is the P4 USB-Serial/JTAG unit. Make it the PRIMARY console so
+# stdin is on that port too (default routes stdin to UART0 on GPIO 37/38, which
+# isn't connected) - needed for the one-time serial WAD transfer (recv_wad.c).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
 # --- misc ---
 # DOOM does deep call chains in R_* / P_*; give the tic task headroom.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576

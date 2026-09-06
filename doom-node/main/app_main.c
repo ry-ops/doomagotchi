@@ -20,9 +20,11 @@
 #include "esp_heap_caps.h"
 #include "esp_psram.h"
 
+#include "esp_system.h"
 #include "bsp/m5stack_tab5.h"
 
 #include "doomgeneric.h"
+#include "recv_wad.h"
 
 static const char *TAG = "doomagotchi";
 
@@ -70,7 +72,12 @@ void app_main(void)
             }
         } else {
             ESP_LOGW(TAG, "IWAD not found at %s", IWAD_PATH);
-            ESP_LOGW(TAG, "  copy assets/freedoom1.wad to the SD card root and reboot");
+            if (recv_wad_over_serial(IWAD_PATH)) {
+                ESP_LOGI(TAG, "WAD received - rebooting to load it");
+                vTaskDelay(pdMS_TO_TICKS(200));
+                esp_restart();
+            }
+            ESP_LOGW(TAG, "no WAD - staying idle; re-run tools/send-wad.py and reboot");
         }
     }
 
