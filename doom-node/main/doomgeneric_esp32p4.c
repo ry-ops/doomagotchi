@@ -165,8 +165,8 @@ static void poll_touch(void)
     }
 
     for (int p = 0; p < cnt; p++) {
-        float hx = (float)ty[p] / PANEL_H;   // physical left(0)..right(1)   -- verify
-        float hy = (float)tx[p] / PANEL_W;   // physical top(0)..bottom(1)   -- verify
+        float hx = 1.0f - (float)ty[p] / PANEL_H;   // physical left(0)..right(1)
+        float hy = (float)tx[p] / PANEL_W;          // physical top(0)..bottom(1)
         int z;
         if (hy > 0.82f)        z = ZFIRE;
         else if (hx < 0.30f)   z = ZL;
