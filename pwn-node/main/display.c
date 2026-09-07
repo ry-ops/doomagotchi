@@ -38,7 +38,12 @@ static const char *TAG = "disp";
 #define INVERT_COLOR     true
 
 // ---- RGB565 helpers ---------------------------------------------------
-#define RGB(r, g, b) ((uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)))
+// The ST7789 takes pixel data big-endian; the S3 writes the framebuffer
+// little-endian and esp_lcd's SPI path doesn't swap for us. So bake the byte
+// swap into every colour constant -- the framebuffer then holds exactly what
+// goes on the wire. (Symptom without this: tan renders yellow, amber renders
+// lavender -- the low/high bytes traded.)
+#define RGB(r, g, b) __builtin_bswap16((uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b) >> 3)))
 #define C_BG      RGB(12, 12, 18)
 #define C_PANEL   RGB(28, 26, 34)
 #define C_INK     RGB(210, 205, 200)
