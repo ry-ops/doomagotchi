@@ -5,6 +5,7 @@ idf_component_register(
         "pcap_wad.c"
         "mood.c"
         "display.c"
+        "lora.c"
     INCLUDE_DIRS "." "../../proto"
     REQUIRES esp_wifi nvs_flash esp_timer esp_event
              fatfs sdmmc esp_driver_sdspi esp_driver_spi esp_driver_gpio

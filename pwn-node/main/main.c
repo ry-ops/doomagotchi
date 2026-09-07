@@ -17,6 +17,7 @@
 #include "pcap_wad.h"
 #include "mood.h"
 #include "display.h"
+#include "lora.h"
 
 static const char *TAG = "pwn";
 
@@ -37,6 +38,9 @@ void app_main(void)
     bool sd = pcap_wad_start();
     ESP_LOGI(TAG, "capture-to-SD: %s", sd ? "on" : "off (no card)");
 
+    bool have_lora = lora_init();   // shares the SD SPI bus; must come after pcap_wad_start
+    ESP_LOGI(TAG, "LoRa TX: %s", have_lora ? "on" : "off");
+
     QueueHandle_t evq = xQueueCreate(64, sizeof(struct dgm_event));
     wifi_sniff_start(evq);
 
@@ -50,9 +54,13 @@ void app_main(void)
             const char *en = ev.event_type < 5 ? EV_NAME[ev.event_type] : "?";
             const char *cn = ev.enemy_class < 6 ? ENEMY_NAME[ev.enemy_class] : "?";
             if (ev.enemy_class < 6) last_enemy = ENEMY_NAME[ev.enemy_class];
-            // this is the packet we WOULD send over LoRa (Phase 3)
             ESP_LOGI(TAG, "dgm_event { v%u unit%u %-10s %-11s rssi%u hash=0x%02x }",
                      ev.version, ev.unit_id, en, cn, ev.rssi_bucket, ev.bssid_hash);
+            // Phase 3: actually send it. A drop is just a monster that doesn't
+            // spawn (ADR 0003), so the result is advisory.
+            if (have_lora) {
+                lora_send_event(&ev);
+            }
         }
 
         int64_t now = esp_timer_get_time();
@@ -95,6 +103,13 @@ void app_main(void)
             ESP_LOGI(TAG, "  [%-8s i%3u]  %lu APs/1m  %lu caps/2m  \"%s\"",
                      m.label, m.intensity, (unsigned long)m.aps_1m,
                      (unsigned long)m.caps_2m, m.quip);
+            if (have_lora) {
+                lora_stats_t l;
+                lora_get_stats(&l);
+                ESP_LOGI(TAG, "  LoRa TX  sent=%lu  timeouts=%lu  errs=%lu  last=%lums",
+                         (unsigned long)l.sent, (unsigned long)l.tx_timeouts,
+                         (unsigned long)l.errors, (unsigned long)l.last_airtime_ms);
+            }
         }
     }
 }
