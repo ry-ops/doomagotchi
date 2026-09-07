@@ -42,14 +42,15 @@ Builds and runs standalone — no Tab5 needed.
       quip. Pure logic; feed it every event + a 1 Hz tick. For now it prints on
       the 5 s stats line.
 - [x] **ST7789 240×135 render** — `display.c`: `esp_lcd` ST7789 on SPI3 (SD is on
-      SPI2), in-RAM RGB565 framebuffer blitted ~1 Hz. Procedural DOOM-marine face
-      that escalates with the mood machine (angry brows at HUNTING, red eyes +
-      teeth at MANIC, blood spatter scaled by intensity), title bar, stat block
-      (CH / APS / HS / PMKID), mood-colored intensity bar, word-wrapped quip.
-      Embedded 5×7 glcdfont, no WAD lumps yet (a Freedoom `STF*` face is a Phase-4
-      nicety). Layout verified against a host mock; **orientation knobs
-      (`ORIENT_SWAP_XY` / `MIRROR_*` / `GAP_*` / `INVERT_COLOR`) still need one
-      pass on glass.** No panel → `display_start()` returns false, sensor headless.
+      SPI2), 1-bit black-on-white framebuffer blitted ~1 Hz, drawn in the
+      **pwnagotchi idiom**. Big centred kaomoji face, one per mood, blinking:
+      `(-_-)` bored · `(~_~)` restless · `(o_o)` hunting · `(@_@)` manic ·
+      `(x_x)` rampage. Top bar `CH n  APS n │ UP h:mm:ss`, the mood quip as the
+      "voice" line, a corner readout (`HS / PMK / MOOD iNNN`), bottom bar
+      `PWND n (aps)  [LAST-ENEMY]`. Mono palette (0x0000/0xFFFF) is
+      byte-order-invariant so the RGB565 endian question doesn't apply. Embedded
+      5×7 glcdfont. No panel → `display_start()` returns false, sensor headless.
+      Confirmed on glass 2026-09-06.
 
 **Phase 2 verified on hardware** (ESP32-S3, 2026-09-06): promiscuous capture +
 classify solid (~300 beacons/10 s, 30+ APs tiered), channel hop + RSSI live,
