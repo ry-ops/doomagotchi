@@ -41,18 +41,50 @@ doesn't use `DG_GetKey`.
 
 ### Phase 1 — the autoplayer (`main/autoplay.c`)
 
-`autoplay_step()` runs once per frame before `doomgeneric_Tick()`. It reads
-the player mobj + the thinker list, finds the nearest `MF_COUNTKILL` monster
-it has `P_CheckSight` to, turns toward it (`KEY_LEFT`/`RIGHT`), fires within
-~12°, closes to a standoff. No visible target → wander. Blocked path (dist
-not improving, or no movement while holding forward) → back off + hard turn.
-Types `iddqd`+`idkfa` on start, `idfa` every ~3000 frames. All via
-`D_PostEvent` — the human key path, zero engine edits.
+`autoplay_step()` runs once per frame before `doomgeneric_Tick()`. All output
+is `D_PostEvent` keypresses (`KEY_UP/DOWN/LEFT/RIGHT`, `KEY_STRAFE_L/R`,
+`KEY_FIRE`, `KEY_USE`, weapon digits `1`–`7`) — the human key path, zero engine
+edits.
+
+Each frame, in order:
+
+1. **acquire** — one thinker-list pass for the cheapest monster, where *cost* =
+   2-D distance + `4 ×` height gap. The `4×` Z weight keeps it on same-floor
+   targets and off monsters stuck down a pit until they're all that's left. The
+   lock is re-validated against the list every frame (no dangling mobj) and
+   held unless something is clearly cheaper.
+2. **shoot** — sweep DOOM's own autoaim trace (`P_AimLineAttack`) across ±54°.
+   A hit is a real unobstructed shot (the trace stops at walls), so this is the
+   fire gate — `P_CheckSight` is unusable in the Freedoom IWAD (its REJECT lump
+   rejects almost everything). On a hit: turn onto it, pick the weapon for its
+   `mobjtype` (`weap_for()` — pistol/shotgun/chaingun/plasma/rockets/BFG, close
+   range downgrades rockets/BFG), hold the trigger, creep to the standoff.
+3. **drop** — target ≥56 units below and near in 2-D → we're on a pit rim;
+   walk straight off it (don't treat the rim as a door), sliding along if a
+   rail blocks the first spot.
+4. **navigate** — otherwise steer toward the target. `pick_dir()` nudges the
+   heading around a grazed corner (`P_CheckPosition` probes, read-only) but
+   never stops forward motion; DOOM's wall-slide does the rest. Straight path
+   blocked → assume a door/lift/riser, shove into it and lean on `USE`.
+5. **wedge kick** — genuinely not moving → short alternating turn+strafe+fwd
+   burst, `USE` tapped fast. No RNG.
+6. **give up** — ~6 s with no ground gained on a target, or 2 failed kicks →
+   blacklist it ~10 s and let `acquire` pick another. This is what breaks the
+   bot out of a bad corner.
+
+Cheats are **re-entered on every level start** and periodically (`idfa`), and
+the typing path is always live — a human at the Tab5 keyboard can enter any
+cheat at any time too.
 
 - [x] `ticcmd` generator replaces human input
-- [x] wander / face nearest monster / fire, reusing DOOM's AI
-- [x] no pathfinder — just LOS + a give-up timer
-- [x] **7h45m unattended on hardware, 0 crashes, never permanently stuck**
+- [x] hunts, navigates to out-of-sight monsters, and **kills** them (autoaim-gated fire)
+- [x] a different weapon per monster type
+- [x] Z-aware target choice + walk-off-the-ledge for monsters below
+- [x] no global pathfinder — greedy 8-dir + `P_CheckPosition` + blacklist recovery
+- [ ] plateaus once reachable monsters are cleared and only pit/far-room ones remain
+      (no true level graph); resolves over a long run as monsters wander / the level changes
+- [ ] one "Store access fault" seen during `doomgeneric_Create` on a cold boot,
+      self-recovered on the panic reboot — watching, not yet reproduced
 
 Runtime footprint: 6.00 MiB zone + 1.00 MiB `DG_ScreenBuffer` + ~1.8 MiB DPI
 framebuffer, all PSRAM (23 MiB free). Internal SRAM ~170 KiB free.
