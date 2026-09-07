@@ -55,6 +55,20 @@ static const uint8_t PCAP_HDR[24] = {
 
 static FILE *s_fp;
 
+// The Cardputer ADV gates its SD slot (and other peripheral rails) behind a
+// bank of enable lines the ROM leaves low. M5's own firmware drives GPIO
+// 3/4/5/6/13/15 high at boot -- GPIO5 is specifically "SD card compatibility".
+// Without this the card never answers CMD8 (send_if_cond times out, 0x108).
+static void board_enable_peripheral_rails(void)
+{
+    static const int en[] = { 3, 4, 5, 6, 13, 15 };
+    uint64_t mask = 0;
+    for (size_t i = 0; i < sizeof(en) / sizeof(en[0]); i++) mask |= 1ULL << en[i];
+    gpio_config_t c = { .pin_bit_mask = mask, .mode = GPIO_MODE_OUTPUT };
+    gpio_config(&c);
+    for (size_t i = 0; i < sizeof(en) / sizeof(en[0]); i++) gpio_set_level(en[i], 1);
+}
+
 static bool open_next_file(void)
 {
     if (s_fp) { fclose(s_fp); s_fp = NULL; }
@@ -113,6 +127,8 @@ static void writer_task(void *arg)
 bool pcap_wad_start(void)
 {
     if (s_ready) return true;
+
+    board_enable_peripheral_rails();
 
     // Clear any prior config on the CS pin, then let the sdspi driver own it
     // (touching it ourselves after this races the driver -> "GPIO conflict").
