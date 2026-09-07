@@ -30,6 +30,7 @@
 
 #include "kbd_usb.h"
 #include "kbd_m5kbd.h"
+#include "autoplay.h"
 
 static const char *TAG = "DG";
 
@@ -182,7 +183,8 @@ static void poll_touch(void)
 int DG_GetKey(int *pressed, unsigned char *key)
 {
     if (kbd_usb_poll(pressed, key) || kbd_m5kbd_poll(pressed, key)) {
-        return 1;   // a real keyboard (incl. cheat codes) takes priority
+        autoplay_note_human_key();   // hand control to the human for a few seconds
+        return 1;                    // a real keyboard (incl. cheat codes) takes priority
     }
 
     static int64_t s_last_poll;

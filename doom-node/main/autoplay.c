@@ -22,8 +22,14 @@
 // Types iddqd + idkfa once so an unattended run survives; idfa periodically.
 
 #include <stdlib.h>
+#include <stdint.h>
+#include <limits.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
+
+#include "autoplay.h"
+#include "nav.h"
 
 // --- vendored doomgeneric ---
 #include "doomdef.h"
@@ -41,6 +47,23 @@
 static const char *TAG = "auto";
 
 #define GODMODE_ON_START 1
+#define HUMAN_HOLDOFF_US  (5 * 1000 * 1000)   // stand down 5 s after a human keypress
+#define KEEPALIVE_SPAWN   1   // no kill in ~30 s -> drop an imp in front (stand-in
+                              // for the Phase 3 RF feed; same P_SpawnMobj path)
+
+// Far enough in the past that we're not suspended at boot, but not so far that
+// (now - s_human_us) can overflow.
+static volatile int64_t s_human_us = -100000000;   // -100 s
+
+void autoplay_note_human_key(void)
+{
+    s_human_us = esp_timer_get_time();
+}
+
+bool autoplay_suspended(void)
+{
+    return (esp_timer_get_time() - s_human_us) < HUMAN_HOLDOFF_US;
+}
 
 // keys we hold; index order matches KEYS[] and want[] below
 enum { K_FWD, K_BACK, K_LEFT, K_RIGHT, K_SL, K_SR, K_FIRE, K_N };
@@ -355,12 +378,12 @@ static void dbg_log(uint32_t tic, const char *mode, int gap, int tgt_type)
     if ((tic % 105) != 0) {
         return;
     }
-    ESP_LOGI(TAG, "tic=%lu %-7s gap=%d vis=%d type=%d | fwd=%d bk=%d L=%d R=%d SL=%d SR=%d fire=%d "
-                  "| nhunt=%d near=%d sight=%d",
+    ESP_LOGI(TAG, "tic=%lu %-6s gap=%d vis=%d type=%d | fwd=%d bk=%d L=%d R=%d SL=%d SR=%d fire=%d "
+                  "| nhunt=%d near=%d route=%d",
              (unsigned long)tic, mode, gap, s_visible, tgt_type,
              s_held[K_FWD], s_held[K_BACK], s_held[K_LEFT], s_held[K_RIGHT],
              s_held[K_SL], s_held[K_SR], s_held[K_FIRE],
-             s_dbg_nhunt, s_dbg_near_d, s_dbg_near_sight);
+             s_dbg_nhunt, s_dbg_near_d, nav_path_len());
 }
 
 // ------------------------------------------------------------------ step ---
@@ -387,6 +410,25 @@ void autoplay_step(void)
     static uint32_t moved_tic;
 
     tic++;
+
+    // Human at the keyboard within the last few seconds -> get out of the way
+    // entirely: release our keys and post nothing, so cheat codes and manual
+    // steering land cleanly. Resumes on its own once the keyboard goes quiet.
+    static boolean was_suspended;
+    if (autoplay_suspended()) {
+        if (!was_suspended) {
+            release_all();
+            select_weapon(0);
+            s_type = NULL;                 // drop any half-typed auto-cheat
+            ESP_LOGI(TAG, "human control - autoplayer standing down");
+            was_suspended = true;
+        }
+        return;
+    }
+    if (was_suspended) {
+        ESP_LOGI(TAG, "keyboard quiet - autoplayer resuming");
+        was_suspended = false;
+    }
 
     if (gamestate != GS_LEVEL) {
         release_all();
@@ -433,7 +475,33 @@ void autoplay_step(void)
 #endif
 
     mobj_t *me = pl->mo;
+    nav_build_if_needed();
     acquire(me, tic);
+
+#if KEEPALIVE_SPAWN
+    // Nothing has died in a while -> the reachable monsters are cleared (or all
+    // that's left is walled-off pits). Drop a fresh imp in front of the player
+    // so the "gameplay" keeps going. This is exactly the P_SpawnMobj call the
+    // Phase 3 RX will make on AP_SEEN - just triggered by boredom for now.
+    {
+        static int last_nhunt = -1;
+        static uint32_t last_kill_tic, last_spawn_tic;
+        if (last_nhunt < 0) { last_nhunt = s_dbg_nhunt; last_kill_tic = tic; }
+        if (s_dbg_nhunt < last_nhunt) { last_kill_tic = tic; }
+        last_nhunt = s_dbg_nhunt;
+        if (tic - last_kill_tic > 450 && tic - last_spawn_tic > 300) {
+            unsigned fa = me->angle >> ANGLETOFINESHIFT;
+            fixed_t sx = me->x + FixedMul(220 * FRACUNIT, finecosine[fa]);
+            fixed_t sy = me->y + FixedMul(220 * FRACUNIT, finesine[fa]);
+            if (P_CheckPosition(me, sx, sy) &&
+                P_SpawnMobj(sx, sy, ONFLOORZ, MT_TROOP)) {
+                ESP_LOGI(TAG, "tic=%lu keepalive: spawned an imp", (unsigned long)tic);
+            }
+            last_spawn_tic = tic;
+            last_kill_tic = tic;
+        }
+    }
+#endif
 
     // physical-movement sample (every 16 tics)
     if ((tic & 15) == 0) {
@@ -501,12 +569,20 @@ void autoplay_step(void)
     }
     s_visible = false;
 
-    // --- NAVIGATE: nothing to shoot - close on / explore toward the target -
+    // --- NAVIGATE: nothing to shoot - route toward the target through the map -
     fixed_t gap = P_AproxDistance(s_tx - me->x, s_ty - me->y);
-    angle_t bearing = R_PointToAngle2(me->x, me->y, s_tx, s_ty);
+    angle_t mon_bearing = R_PointToAngle2(me->x, me->y, s_tx, s_ty);
 
-    // No progress toward this target for a while -> it's unreachable from here;
-    // blacklist it and let acquire() pick another so we don't grind one wall.
+    // Route through the sector graph. If it gives a waypoint we steer at that
+    // (the next doorway); otherwise (same room / unreachable) steer at the
+    // monster and let the reactive fallback below handle it.
+    fixed_t wx, wy;
+    bool nav_use = false;
+    boolean routed = nav_waypoint(me->x, me->y, s_tx, s_ty, &wx, &wy, &nav_use);
+    angle_t bearing = routed ? R_PointToAngle2(me->x, me->y, wx, wy) : mon_bearing;
+
+    // No progress for a while -> unreachable from here; blacklist it and let
+    // acquire() pick another so we don't grind one wall or one pit rim.
     if (gap_for != s_target) {
         gap_for = s_target;
         best_gap = 0x7fffffff;
@@ -515,7 +591,7 @@ void autoplay_step(void)
     if (gap + (48 * FRACUNIT) < best_gap) {
         best_gap = gap;
         progress_tic = tic;
-    } else if (tic - progress_tic > 90) {   // ~6 s of no ground gained
+    } else if (tic - progress_tic > 120) {   // ~8 s of no ground gained
         bail_target(tic);
         best_gap = 0x7fffffff;
         progress_tic = tic;
@@ -529,8 +605,19 @@ void autoplay_step(void)
     // to its level. Don't treat the rim as a door.
     boolean below = (me->z - s_tz) > (56 * FRACUNIT);
     if (below && gap < (280 * FRACUNIT)) {
+        // Try for ~3 s to walk off the rim; if we still haven't dropped (many
+        // Freedoom pits are fully walled - you can't get in from above), give
+        // up on this one.
+        static uint32_t drop_since;
+        static mobj_t *drop_for;
+        if (drop_for != s_target) { drop_for = s_target; drop_since = tic; }
+        if (tic - drop_since > 45 && (me->z - s_tz) > (56 * FRACUNIT)) {
+            bail_target(tic);
+            release_all();
+            return;
+        }
         mode = "drop";
-        angle_t da = bearing - me->angle;
+        angle_t da = mon_bearing - me->angle;
         boolean left = (da != 0) && (da < ANG180);
         if (!(da < TURN_DEADBAND || da > (angle_t)(0u - TURN_DEADBAND))) {
             want[left ? K_LEFT : K_RIGHT] = true;
@@ -572,7 +659,7 @@ void autoplay_step(void)
         else               { want[K_RIGHT] = true; want[K_SR] = true; }
         use_tick(tic, 8);
     } else {
-        mode = "chase";
+        mode = routed ? "route" : "chase";
         angle_t aim = obstacle ? bearing : pick_dir(me, bearing);
         angle_t da = aim - me->angle;
         boolean facing = (da < TURN_DEADBAND) || (da > (angle_t)(0u - TURN_DEADBAND));
@@ -582,10 +669,14 @@ void autoplay_step(void)
             want[left ? K_SL : K_SR] = true;
         }
         boolean ahead = (da < AHEAD_CONE) || (da > (angle_t)(0u - AHEAD_CONE));
-        if (obstacle || (gap > STANDOFF && ahead)) {
-            want[K_FWD] = true;
+        // routed: keep moving toward the doorway through a wider cone (the
+        // turn + strafe swing us onto it); chasing: only push when facing it.
+        angle_t wide = AHEAD_CONE + ANG45;
+        boolean push = (da < wide) || (da > (angle_t)(0u - wide));
+        if (obstacle || nav_use || (routed && push) || (gap > STANDOFF && ahead)) {
+            want[K_FWD] = obstacle || nav_use || (routed ? push : ahead);
         }
-        use_tick(tic, obstacle ? 8 : 40);
+        use_tick(tic, (obstacle || nav_use) ? 8 : 40);
     }
 
     select_weapon(0);

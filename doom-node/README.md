@@ -62,29 +62,46 @@ Each frame, in order:
 3. **drop** — target ≥56 units below and near in 2-D → we're on a pit rim;
    walk straight off it (don't treat the rim as a door), sliding along if a
    rail blocks the first spot.
-4. **navigate** — otherwise steer toward the target. `pick_dir()` nudges the
-   heading around a grazed corner (`P_CheckPosition` probes, read-only) but
-   never stops forward motion; DOOM's wall-slide does the rest. Straight path
-   blocked → assume a door/lift/riser, shove into it and lean on `USE`.
+4. **navigate** — route to the target through the sector graph (`nav.c`, below).
+   The waypoint is the next doorway; steer at it, hold forward through a wide
+   cone, and lean on `USE` when the graph says the crossing is a door/lift.
+   No route (same room / unreachable) → steer straight at the monster and let
+   DOOM's wall-slide carry the glancing contact; `pick_dir()` nudges the aim
+   around a grazed corner (read-only `P_CheckPosition` probes).
 5. **wedge kick** — genuinely not moving → short alternating turn+strafe+fwd
    burst, `USE` tapped fast. No RNG.
-6. **give up** — ~6 s with no ground gained on a target, or 2 failed kicks →
-   blacklist it ~10 s and let `acquire` pick another. This is what breaks the
-   bot out of a bad corner.
+6. **give up** — ~8 s with no ground gained (or stuck at a pit rim for ~3 s, or
+   2 failed kicks) → blacklist the target ~10 s and let `acquire` pick another.
 
-Cheats are **re-entered on every level start** and periodically (`idfa`), and
-the typing path is always live — a human at the Tab5 keyboard can enter any
-cheat at any time too.
+**`nav.c` — the level graph.** Built once per level (rebuilt on `E?M?` change),
+all read-only queries into `sectors[]` / `lines[]` / `R_PointInSubsector` — no
+engine edits. Nodes are sectors (centre = `soundorg`); an edge is a two-sided
+linedef the player can cross: opening ≥ 56, step-up ≤ 24 *or* the line has a
+special (door/lift — passable after a `USE`, cost-penalised). A* (heuristic =
+centre-to-centre distance) from the player's sector to the target's; the result
+is a list of doorway midpoints to walk. E1M1: 182 sectors, 942 edges, ~32 KiB
+PSRAM, sub-ms to build.
 
-- [x] `ticcmd` generator replaces human input
-- [x] hunts, navigates to out-of-sight monsters, and **kills** them (autoaim-gated fire)
+**Human control.** Any physical keypress (`DG_GetKey`) suspends the autoplayer
+for 5 s — it releases every key and posts nothing, so you can type cheats
+(`idclip`, `iddqd`, …) or steer manually with a clean channel, no fighting the
+bot and no stomped cheat sequences. Resumes on its own once the keyboard is
+quiet. Cheats are also re-entered by the bot on every level start (+ periodic
+`idfa`).
+
+**Keepalive spawn** (`KEEPALIVE_SPAWN`, on). No kill in ~30 s → `P_SpawnMobj` an
+imp ~220 units in front of the player. Stand-in for the Phase 3 RF feed (same
+spawn call `AP_SEEN` will make); flip the define off once the LoRa RX lands.
+
+- [x] `ticcmd` generator replaces human input; hunts + **kills** (autoaim-gated fire)
 - [x] a different weapon per monster type
+- [x] routes through the level via an A* sector graph (doors/lifts/stairs)
 - [x] Z-aware target choice + walk-off-the-ledge for monsters below
-- [x] no global pathfinder — greedy 8-dir + `P_CheckPosition` + blacklist recovery
-- [ ] plateaus once reachable monsters are cleared and only pit/far-room ones remain
-      (no true level graph); resolves over a long run as monsters wander / the level changes
-- [ ] one "Store access fault" seen during `doomgeneric_Create` on a cold boot,
-      self-recovered on the panic reboot — watching, not yet reproduced
+- [x] human keypress → autoplayer stands down for clean manual / cheat input
+- [x] keepalive imp spawn when nothing's reachable
+- Hardware (Tab5, 2026-09-07): ~12 kills / 2 min on E1M1, weapon switches
+  correct, recovers from every stuck spot. Fully walled pits still need the
+  keepalive / RF feed rather than a path. Boot fault not seen again.
 
 Runtime footprint: 6.00 MiB zone + 1.00 MiB `DG_ScreenBuffer` + ~1.8 MiB DPI
 framebuffer, all PSRAM (23 MiB free). Internal SRAM ~170 KiB free.
