@@ -30,7 +30,11 @@ Builds and runs standalone — no Tab5 needed.
       (re)associating), never on a timer.
 - [x] **emit `dgm_event`** onto a queue; `main.c` prints each one (the packet it
       *would* LoRa in Phase 3) + a 5 s stats line.
-- [ ] pcap writer to SD, files named `*.WAD`
+- [x] **pcap writer to SD** — `pcap_wad.c`: mounts microSD (SPI), appends one
+      beacon per BSSID + every EAPOL frame to a rotating `CAPnnnn.WAD` (plain
+      little-endian pcap, linktype 105). Writes run on a core-1 task fed by a
+      24-slot pool so the RX callback never blocks; drops instead of stalling.
+      No card → module no-ops, sensor runs on.
 - [ ] ST7789 240×135: real DOOM status bar + reactive mood face
 - [ ] mood state machine (inverted pwnagotchi)
 

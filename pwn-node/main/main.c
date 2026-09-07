@@ -13,6 +13,7 @@
 
 #include "dgm_event.h"
 #include "wifi_sniff.h"
+#include "pcap_wad.h"
 
 static const char *TAG = "pwn";
 
@@ -24,6 +25,9 @@ static const char *ENEMY_NAME[] = {
 void app_main(void)
 {
     ESP_LOGI(TAG, "DOOMAGOTCHI pwn node - the airspace is the level");
+
+    bool sd = pcap_wad_start();
+    ESP_LOGI(TAG, "capture-to-SD: %s", sd ? "on" : "off (no card)");
 
     QueueHandle_t evq = xQueueCreate(64, sizeof(struct dgm_event));
     wifi_sniff_start(evq);
@@ -44,10 +48,17 @@ void app_main(void)
             last_stats = now;
             wifi_sniff_stats_t s;
             wifi_sniff_get_stats(&s);
+            pcap_wad_stats_t w;
+            pcap_wad_get_stats(&w);
             ESP_LOGI(TAG, "ch%2u  frames=%lu beacons=%lu eapol=%lu aps=%lu  hs=%lu pmkid=%lu  rssi=%d",
                      s.channel, (unsigned long)s.frames, (unsigned long)s.beacons,
                      (unsigned long)s.eapol, (unsigned long)s.aps,
                      (unsigned long)s.handshakes, (unsigned long)s.pmkids, s.last_rssi);
+            if (w.mounted) {
+                ESP_LOGI(TAG, "  CAP%04u.WAD  %lu frames  %lu KiB  (dropped %lu)",
+                         w.file_index, (unsigned long)w.written,
+                         (unsigned long)(w.bytes >> 10), (unsigned long)w.dropped);
+            }
         }
     }
 }

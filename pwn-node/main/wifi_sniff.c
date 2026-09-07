@@ -9,6 +9,7 @@
 #include "nvs_flash.h"
 
 #include "dgm_event.h"
+#include "pcap_wad.h"
 
 static const char *TAG = "sniff";
 
@@ -291,6 +292,7 @@ static void sniff_cb(void *buf, wifi_promiscuous_pkt_type_t ptype)
         ap->enemy_class = cls;
         if (is_new) {
             emit(DGM_EV_AP_SEEN, cls, rssi_bucket(pkt->rx_ctrl.rssi), bssid);
+            pcap_wad_offer(p, len, now);   // one beacon per BSSID -> keeps the ESSID
         }
         return;
     }
@@ -305,6 +307,7 @@ static void sniff_cb(void *buf, wifi_promiscuous_pkt_type_t ptype)
         if (l[0] == 0xAA && l[1] == 0xAA && l[2] == 0x03 &&
             l[3] == 0x00 && l[4] == 0x00 && l[5] == 0x00 &&
             l[6] == 0x88 && l[7] == 0x8E) {
+            pcap_wad_offer(p, len, now);   // every EAPOL frame, verbatim
             handle_eapol(l + 8, (size_t)(len - 4 - (hlen + 8)), bssid, now);
         }
         return;
