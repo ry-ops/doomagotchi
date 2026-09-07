@@ -16,6 +16,7 @@
 #include "wifi_sniff.h"
 #include "pcap_wad.h"
 #include "mood.h"
+#include "display.h"
 
 static const char *TAG = "pwn";
 
@@ -29,6 +30,9 @@ void app_main(void)
     ESP_LOGI(TAG, "DOOMAGOTCHI pwn node - the airspace is the level");
 
     mood_init();
+
+    bool have_lcd = display_start();
+    ESP_LOGI(TAG, "status display: %s", have_lcd ? "on" : "off");
 
     bool sd = pcap_wad_start();
     ESP_LOGI(TAG, "capture-to-SD: %s", sd ? "on" : "off (no card)");
@@ -53,6 +57,17 @@ void app_main(void)
         if (now - last_tick > 1000 * 1000) {
             last_tick = now;
             mood_tick();
+
+            wifi_sniff_stats_t ss;
+            wifi_sniff_get_stats(&ss);
+            disp_model_t dm = {
+                .channel = ss.channel,
+                .aps = ss.aps,
+                .handshakes = ss.handshakes,
+                .pmkids = ss.pmkids,
+            };
+            mood_get(&dm.mood);
+            display_render(&dm);
         }
 
         if (now - last_stats > 5LL * 1000 * 1000) {

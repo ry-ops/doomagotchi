@@ -41,13 +41,18 @@ Builds and runs standalone — no Tab5 needed.
       0–255 (face animation / blink rate later), and a rotating DOOM-flavored
       quip. Pure logic; feed it every event + a 1 Hz tick. For now it prints on
       the 5 s stats line.
-- [ ] **ST7789 240×135 render** — the mood face + status bar. Needs the Cardputer
-      in hand: it's untestable pixel code, and the "real DOOM status bar" wants
-      the Freedoom `STF*` / `STTNUM*` lumps (WAD picture-format decode). Deferred
-      until the board is connected.
+- [x] **ST7789 240×135 render** — `display.c`: `esp_lcd` ST7789 on SPI3 (SD is on
+      SPI2), in-RAM RGB565 framebuffer blitted ~1 Hz. Procedural DOOM-marine face
+      that escalates with the mood machine (angry brows at HUNTING, red eyes +
+      teeth at MANIC, blood spatter scaled by intensity), title bar, stat block
+      (CH / APS / HS / PMKID), mood-colored intensity bar, word-wrapped quip.
+      Embedded 5×7 glcdfont, no WAD lumps yet (a Freedoom `STF*` face is a Phase-4
+      nicety). Layout verified against a host mock; **orientation knobs
+      (`ORIENT_SWAP_XY` / `MIRROR_*` / `GAP_*` / `INVERT_COLOR`) still need one
+      pass on glass.** No panel → `display_start()` returns false, sensor headless.
 
-Everything above `ST7789 render` builds clean and runs headless. Not flashed on
-hardware yet — needs the Cardputer connected.
+All of Phase 2 builds clean and runs headless. Not flashed on hardware yet —
+needs the Cardputer connected (orientation + SD + real RF are the open checks).
 
 ## Cardputer Adv pins (for later steps)
 
