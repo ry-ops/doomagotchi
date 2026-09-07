@@ -44,17 +44,11 @@ static const char *TAG = "disp";
 // goes on the wire. (Symptom without this: tan renders yellow, amber renders
 // lavender -- the low/high bytes traded.)
 #define RGB(r, g, b) __builtin_bswap16((uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b) >> 3)))
-#define C_BG      RGB(12, 12, 18)
-#define C_PANEL   RGB(28, 26, 34)
-#define C_INK     RGB(210, 205, 200)
-#define C_DIM     RGB(120, 118, 128)
-#define C_RED     RGB(200, 30, 24)
-#define C_DARKRED RGB(90, 12, 10)
-#define C_AMBER   RGB(220, 150, 40)
-#define C_GREEN   RGB(80, 200, 90)
-#define C_SKIN    RGB(196, 150, 120)
-#define C_SKINSH  RGB(140, 100, 80)
-#define C_BLOOD   RGB(170, 20, 16)
+// pwnagotchi look: 1-bit, black ink on a white ground. 0x0000 / 0xFFFF are
+// byte-order-invariant so the mono UI is immune to any RGB565 endian question.
+#define C_PAPER   RGB(255, 255, 255)
+#define C_INK     RGB(0, 0, 0)
+#define C_DIM     RGB(128, 128, 128)
 
 static uint16_t *s_fb;                  // LCD_W * LCD_H, RGB565, big-endian on wire
 static esp_lcd_panel_handle_t s_panel;
@@ -119,14 +113,6 @@ static void fill_rect(int x, int y, int w, int h, uint16_t c)
     }
 }
 
-static void frame_rect(int x, int y, int w, int h, uint16_t c)
-{
-    fill_rect(x, y, w, 1, c);
-    fill_rect(x, y + h - 1, w, 1, c);
-    fill_rect(x, y, 1, h, c);
-    fill_rect(x + w - 1, y, 1, h, c);
-}
-
 static void clear(uint16_t c)
 {
     for (int i = 0; i < LCD_W * LCD_H; i++) s_fb[i] = c;
@@ -180,124 +166,87 @@ static void draw_wrapped(int x0, int y0, int x1, int lh, const char *s, uint16_t
     }
 }
 
-// ---------------------------------------------------------------------
-// the marine's face -- procedural, reacts to mood + intensity
-// ---------------------------------------------------------------------
-static uint32_t s_rng = 0x1234abcd;
-static uint32_t xrand(void) { s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5; return s_rng; }
-
-static void draw_face(int fx, int fy, int fw, int fh, const mood_state_t *m)
+static int text_w(const char *s, int scale) { return (int)strlen(s) * 6 * scale; }
+static void draw_text_right(int xr, int y, const char *s, uint16_t fg, int scale)
 {
-    static int blink_t;
-    bool blink = false;
-    // higher intensity -> blinks more often (twitchy)
-    int period = 40 - (int)(m->intensity / 8);
-    if (period < 6) period = 6;
-    if (++blink_t % period < 2) blink = true;
+    draw_text(xr - text_w(s, scale), y, s, fg, scale);
+}
+static void draw_text_center(int y, const char *s, uint16_t fg, int scale)
+{
+    draw_text((LCD_W - text_w(s, scale)) / 2, y, s, fg, scale);
+}
 
-    fill_rect(fx, fy, fw, fh, C_PANEL);
-    frame_rect(fx, fy, fw, fh, C_DIM);
+// ---------------------------------------------------------------------
+// the face -- pwnagotchi-style kaomoji, one per mood. DOOMAGOTCHI is an
+// *inverted* pwnagotchi: deadest-looking when the air is quiet, most alive
+// mid-slaughter.
+// ---------------------------------------------------------------------
+static const char *const FACE[MOOD_COUNT] = {
+    [MOOD_BORED]    = "(-_-)",
+    [MOOD_RESTLESS] = "(~_~)",
+    [MOOD_HUNTING]  = "(o_o)",
+    [MOOD_MANIC]    = "(@_@)",
+    [MOOD_RAMPAGE]  = "(x_x)",
+};
 
-    int hx = fx + 4, hy = fy + 4, hw = fw - 8, hh = fh - 8;
-    fill_rect(hx, hy, hw, hh, C_SKIN);
-    fill_rect(hx, hy + hh - 3, hw, 3, C_SKINSH);          // jaw shadow
-    fill_rect(hx, hy, hw, 2, C_SKINSH);                    // brow shadow
+static void draw_face(const mood_state_t *m)
+{
+    static int bt;
+    bool blink = (++bt % 33) < 2 && m->mood != MOOD_BORED;
 
-    int eyeY = hy + hh / 3;
-    int lx = hx + hw / 4 - 2, rx = hx + (3 * hw) / 4 - 2;
-    uint16_t eyec = (m->mood >= MOOD_MANIC) ? C_RED : RGB(20, 20, 24);
-
+    char f[8];
+    strncpy(f, FACE[m->mood], sizeof(f) - 1);
+    f[sizeof(f) - 1] = 0;
     if (blink) {
-        fill_rect(lx - 1, eyeY + 2, 6, 1, C_SKINSH);
-        fill_rect(rx - 1, eyeY + 2, 6, 1, C_SKINSH);
-    } else {
-        fill_rect(lx, eyeY, 4, 3, eyec);
-        fill_rect(rx, eyeY, 4, 3, eyec);
-        if (m->mood >= MOOD_HUNTING) {                     // angry brows
-            for (int i = 0; i < 6; i++) {
-                px(lx - 1 + i, eyeY - 2 + i / 3, RGB(40, 30, 26));
-                px(rx + 4 - i, eyeY - 2 + i / 3, RGB(40, 30, 26));
-            }
-        }
+        for (char *p = f; *p; p++)
+            if (*p != '(' && *p != ')' && *p != '_') *p = '-';
     }
-
-    // mouth by mood
-    int mY = hy + (2 * hh) / 3, mX = hx + hw / 4, mW = hw / 2;
-    switch (m->mood) {
-    case MOOD_BORED:
-        fill_rect(mX, mY + 2, mW, 1, C_SKINSH);
-        break;
-    case MOOD_RESTLESS:
-        for (int i = 0; i < mW; i++) px(mX + i, mY + 3 - (i < mW / 2 ? 0 : 1), C_SKINSH);
-        break;
-    case MOOD_HUNTING:
-        fill_rect(mX, mY, mW, 3, RGB(30, 16, 16));
-        break;
-    case MOOD_MANIC:
-        fill_rect(mX, mY, mW, 4, RGB(24, 12, 12));
-        for (int i = 0; i < mW; i += 2) px(mX + i, mY, C_INK);    // teeth
-        break;
-    case MOOD_RAMPAGE:
-    default:
-        fill_rect(mX - 1, mY - 1, mW + 2, 6, RGB(20, 8, 8));
-        for (int i = 0; i < mW + 2; i += 2) px(mX - 1 + i, mY - 1, C_INK);
-        break;
-    }
-
-    // blood spatter scaled by intensity
-    int spatter = m->intensity / 12;
-    for (int i = 0; i < spatter; i++) {
-        int bx = hx + (xrand() % hw);
-        int by = hy + (xrand() % hh);
-        px(bx, by, C_BLOOD);
-        if (xrand() & 1) px(bx + 1, by, C_BLOOD);
-    }
+    draw_text_center(50, f, C_INK, 5);
 }
 
 // ---------------------------------------------------------------------
 // public
 // ---------------------------------------------------------------------
-static uint16_t mood_color(mood_t m)
-{
-    switch (m) {
-    case MOOD_BORED:     return C_DIM;
-    case MOOD_RESTLESS:  return C_INK;
-    case MOOD_HUNTING:   return C_AMBER;
-    case MOOD_MANIC:     return C_RED;
-    case MOOD_RAMPAGE:   default: return RGB(255, 80, 40);
-    }
-}
-
 void display_render(const disp_model_t *m)
 {
     if (!s_ready) return;
 
-    clear(C_BG);
+    clear(C_PAPER);
 
-    // title bar
-    fill_rect(0, 0, LCD_W, 13, C_DARKRED);
-    draw_text(LCD_W / 2 - (11 * 6) / 2, 3, "DOOMAGOTCHI", RGB(240, 200, 190), 1);
+    char l[48];
 
-    // face
-    draw_face(4, 17, 44, 44, &m->mood);
+    // --- top bar: channel + AP count | uptime ---
+    snprintf(l, sizeof(l), "CH %u  APS %lu", m->channel, (unsigned long)m->aps);
+    draw_text(3, 3, l, C_INK, 1);
+    uint32_t up = m->uptime_s;
+    snprintf(l, sizeof(l), "UP %lu:%02lu:%02lu",
+             (unsigned long)(up / 3600), (unsigned long)((up / 60) % 60),
+             (unsigned long)(up % 60));
+    draw_text_right(LCD_W - 3, 3, l, C_INK, 1);
+    fill_rect(0, 13, LCD_W, 1, C_INK);
 
-    // stat lines
-    char buf[40];
-    snprintf(buf, sizeof(buf), "CH:%02u   APS:%lu", m->channel, (unsigned long)m->aps);
-    draw_text(56, 20, buf, C_INK, 1);
-    snprintf(buf, sizeof(buf), "HS:%lu   PMKID:%lu",
+    // --- voice line: the mood quip, pwnagotchi's "speech" ---
+    draw_wrapped(3, 19, LCD_W - 3, 10, m->mood.quip, C_INK);
+
+    // --- big face ---
+    draw_face(&m->mood);
+
+    // --- corner readout (pwnagotchi's mem/cpu/temp slot) ---
+    snprintf(l, sizeof(l), "HS %lu  PMK %lu",
              (unsigned long)m->handshakes, (unsigned long)m->pmkids);
-    draw_text(56, 32, buf, C_INK, 1);
-    draw_text(56, 44, "MOOD:", C_DIM, 1);
-    draw_text(56 + 6 * 6, 44, m->mood.label, mood_color(m->mood.mood), 1);
+    draw_text_right(LCD_W - 3, 96, l, C_INK, 1);
+    snprintf(l, sizeof(l), "%s  i%u", m->mood.label, m->mood.intensity);
+    draw_text_right(LCD_W - 3, 106, l, C_INK, 1);
 
-    // intensity bar
-    frame_rect(4, 66, LCD_W - 8, 9, C_DIM);
-    int fillw = (LCD_W - 12) * m->mood.intensity / 255;
-    fill_rect(6, 68, fillw, 5, mood_color(m->mood.mood));
-
-    // quip
-    draw_wrapped(4, 80, LCD_W - 4, 11, m->mood.quip, C_DIM);
+    // --- bottom bar ---
+    fill_rect(0, LCD_H - 14, LCD_W, 1, C_INK);
+    snprintf(l, sizeof(l), "PWND %lu (%lu)",
+             (unsigned long)(m->handshakes + m->pmkids), (unsigned long)m->aps);
+    draw_text(3, LCD_H - 10, l, C_INK, 1);
+    if (m->last_enemy) {
+        snprintf(l, sizeof(l), "[%s]", m->last_enemy);
+        draw_text_right(LCD_W - 3, LCD_H - 10, l, C_INK, 1);
+    }
 
     esp_lcd_panel_draw_bitmap(s_panel, 0, 0, LCD_W, LCD_H, s_fb);
 }
@@ -361,10 +310,10 @@ bool display_start(void)
     s_ready = true;
 
     // splash so a blank panel isn't mistaken for a dead one
-    clear(C_BG);
-    fill_rect(0, 0, LCD_W, 13, C_DARKRED);
-    draw_text(LCD_W / 2 - (11 * 6) / 2, 3, "DOOMAGOTCHI", RGB(240, 200, 190), 1);
-    draw_text(28, 60, "the airspace is the level", C_DIM, 1);
+    clear(C_PAPER);
+    draw_text_center(30, "DOOMAGOTCHI", C_INK, 2);
+    draw_text_center(58, "the airspace is the level", C_INK, 1);
+    draw_text_center(80, "(o_o)", C_INK, 4);
     esp_lcd_panel_draw_bitmap(s_panel, 0, 0, LCD_W, LCD_H, s_fb);
     gpio_set_level(PIN_BL, 1);
 

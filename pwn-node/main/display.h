@@ -18,6 +18,8 @@ typedef struct {
     uint32_t aps;
     uint32_t handshakes;
     uint32_t pmkids;
+    uint32_t uptime_s;
+    const char *last_enemy;   // name of the last AP's enemy class, or NULL
     mood_state_t mood;
 } disp_model_t;
 

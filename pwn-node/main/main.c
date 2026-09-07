@@ -22,7 +22,7 @@ static const char *TAG = "pwn";
 
 static const char *EV_NAME[] = { "AP_SEEN", "HANDSHAKE", "PMKID", "AP_LOST", "SESSION_END" };
 static const char *ENEMY_NAME[] = {
-    "Zombieman", "ShotgunGuy", "Imp", "Cacodemon", "Spectre", "Baron",
+    "ZOMBIEMAN", "SHOTGUN GUY", "IMP", "CACODEMON", "SPECTRE", "BARON",
 };
 
 void app_main(void)
@@ -40,6 +40,8 @@ void app_main(void)
     QueueHandle_t evq = xQueueCreate(64, sizeof(struct dgm_event));
     wifi_sniff_start(evq);
 
+    const int64_t boot_us = esp_timer_get_time();
+    const char *last_enemy = NULL;
     int64_t last_stats = 0, last_tick = 0;
     for (;;) {
         struct dgm_event ev;
@@ -47,6 +49,7 @@ void app_main(void)
             mood_on_event(&ev);
             const char *en = ev.event_type < 5 ? EV_NAME[ev.event_type] : "?";
             const char *cn = ev.enemy_class < 6 ? ENEMY_NAME[ev.enemy_class] : "?";
+            if (ev.enemy_class < 6) last_enemy = ENEMY_NAME[ev.enemy_class];
             // this is the packet we WOULD send over LoRa (Phase 3)
             ESP_LOGI(TAG, "dgm_event { v%u unit%u %-10s %-11s rssi%u hash=0x%02x }",
                      ev.version, ev.unit_id, en, cn, ev.rssi_bucket, ev.bssid_hash);
@@ -65,6 +68,8 @@ void app_main(void)
                 .aps = ss.aps,
                 .handshakes = ss.handshakes,
                 .pmkids = ss.pmkids,
+                .uptime_s = (uint32_t)((now - boot_us) / 1000000),
+                .last_enemy = last_enemy,
             };
             mood_get(&dm.mood);
             display_render(&dm);
