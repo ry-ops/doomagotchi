@@ -51,8 +51,19 @@ Builds and runs standalone — no Tab5 needed.
       (`ORIENT_SWAP_XY` / `MIRROR_*` / `GAP_*` / `INVERT_COLOR`) still need one
       pass on glass.** No panel → `display_start()` returns false, sensor headless.
 
-All of Phase 2 builds clean and runs headless. Not flashed on hardware yet —
-needs the Cardputer connected (orientation + SD + real RF are the open checks).
+**Phase 2 verified on hardware** (ESP32-S3, 2026-09-06): promiscuous capture +
+classify solid (~300 beacons/10 s, 30+ APs tiered), channel hop + RSSI live,
+mood machine sane (idles ~i60), ST7789 face + status bar render with correct
+rotation, SD mounts and `CAPnnnn.WAD` grows with zero drops. Only the
+EAPOL/PMKID paths are unexercised — they need a real client (re)associating and
+this is passive-only, so nothing forces one.
+
+### Cardputer ADV gotcha — SD peripheral rails
+
+The ADV isolates its SD slot (and other rails) behind enable lines the ROM
+leaves low. `pcap_wad_start()` drives **GPIO 3/4/5/6/13/15 high** before SPI —
+without GPIO5 in particular the card never answers CMD8 (`send_if_cond` →
+`0x108`). Matches M5's own firmware bring-up.
 
 ## Cardputer Adv pins (for later steps)
 
