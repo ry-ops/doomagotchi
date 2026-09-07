@@ -35,10 +35,19 @@ Builds and runs standalone — no Tab5 needed.
       little-endian pcap, linktype 105). Writes run on a core-1 task fed by a
       24-slot pool so the RX callback never blocks; drops instead of stalling.
       No card → module no-ops, sensor runs on.
-- [ ] ST7789 240×135: real DOOM status bar + reactive mood face
-- [ ] mood state machine (inverted pwnagotchi)
+- [x] **mood state machine** — `mood.c`: the *inverted* pwnagotchi. Busy airspace
+      → manic/rampage; dead air → bored/mean. 60 s AP window + 120 s capture
+      window drive `MOOD_BORED/RESTLESS/HUNTING/MANIC/RAMPAGE`, an intensity
+      0–255 (face animation / blink rate later), and a rotating DOOM-flavored
+      quip. Pure logic; feed it every event + a 1 Hz tick. For now it prints on
+      the 5 s stats line.
+- [ ] **ST7789 240×135 render** — the mood face + status bar. Needs the Cardputer
+      in hand: it's untestable pixel code, and the "real DOOM status bar" wants
+      the Freedoom `STF*` / `STTNUM*` lumps (WAD picture-format decode). Deferred
+      until the board is connected.
 
-Not built/flashed on hardware yet — needs the Cardputer connected.
+Everything above `ST7789 render` builds clean and runs headless. Not flashed on
+hardware yet — needs the Cardputer connected.
 
 ## Cardputer Adv pins (for later steps)
 
