@@ -17,7 +17,7 @@ First boot with no `/sdcard/freedoom1.wad`: the firmware enters "WAD receive
 mode" — run `python ../tools/send-wad.py /dev/cu.usbmodem1101 ../assets/freedoom1.wad`
 (needs pyserial), it writes the IWAD to the SD over the console and reboots.
 
-## Phase 0 — DONE ✅
+## Phases 0 & 1 — DONE ✅
 
 **Gate: Freedoom is playable on the Tab5 by hand.**
 
@@ -38,6 +38,21 @@ mode" — run `python ../tools/send-wad.py /dev/cu.usbmodem1101 ../assets/freedo
 The A164's event stream is one-key-at-a-time (release = HID usage 0), so
 forward+turn can't be held together. Fine for now; Phase 1's autoplayer
 doesn't use `DG_GetKey`.
+
+### Phase 1 — the autoplayer (`main/autoplay.c`)
+
+`autoplay_step()` runs once per frame before `doomgeneric_Tick()`. It reads
+the player mobj + the thinker list, finds the nearest `MF_COUNTKILL` monster
+it has `P_CheckSight` to, turns toward it (`KEY_LEFT`/`RIGHT`), fires within
+~12°, closes to a standoff. No visible target → wander. Blocked path (dist
+not improving, or no movement while holding forward) → back off + hard turn.
+Types `iddqd`+`idkfa` on start, `idfa` every ~3000 frames. All via
+`D_PostEvent` — the human key path, zero engine edits.
+
+- [x] `ticcmd` generator replaces human input
+- [x] wander / face nearest monster / fire, reusing DOOM's AI
+- [x] no pathfinder — just LOS + a give-up timer
+- [x] **7h45m unattended on hardware, 0 crashes, never permanently stuck**
 
 Runtime footprint: 6.00 MiB zone + 1.00 MiB `DG_ScreenBuffer` + ~1.8 MiB DPI
 framebuffer, all PSRAM (23 MiB free). Internal SRAM ~170 KiB free.
