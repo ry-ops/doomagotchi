@@ -119,13 +119,16 @@ void mood_tick(void)
         m = MOOD_BORED;
     }
 
-    // intensity: blend recent-kill heat with new-AP churn, 0..255
+    // intensity 0..255 = "how much blood is in the air". Dominated by recent
+    // captures; AP churn is a small saturating background term so a dense but
+    // quiet area idles warm, not maxed.
     int heat = 0;
     if (since_cap != INT64_MAX) {
         int64_t s = since_cap / 1000000;
-        if (s < 60) heat = (int)(200 - s * 3);   // 200 down to ~20 over a minute
+        if (s < 60) heat = (int)(210 - s * 3);   // 210 -> ~30 over a minute
     }
-    heat += (int)(aps * 8) + (int)(caps * 24);
+    int ap_term = (int)(aps > 20 ? 20 : aps) * 3;   // 0..60, saturating
+    heat += ap_term + (int)caps * 30;
     if (heat < 0) heat = 0;
     if (heat > 255) heat = 255;
 

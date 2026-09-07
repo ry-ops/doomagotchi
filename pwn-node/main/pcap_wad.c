@@ -114,10 +114,9 @@ bool pcap_wad_start(void)
 {
     if (s_ready) return true;
 
-    // The sdspi driver configures CS itself; give it a clean, known state first.
+    // Clear any prior config on the CS pin, then let the sdspi driver own it
+    // (touching it ourselves after this races the driver -> "GPIO conflict").
     gpio_reset_pin(SD_CS);
-    gpio_set_direction(SD_CS, GPIO_MODE_OUTPUT);
-    gpio_set_level(SD_CS, 1);
 
     spi_bus_config_t bus = {
         .mosi_io_num = SD_MOSI,
