@@ -430,8 +430,30 @@ void autoplay_step(void)
         was_suspended = false;
     }
 
+    // First boot: let the title screen / demo attract loop actually show and
+    // wait for a real human keypress to start a game (DOOM behaving like DOOM).
+    // Once a game has been started at least once, this no longer applies -
+    // every later trip through the menu/intermission (death, level exit, ESC)
+    // gets the usual auto-Enter so unattended self-play keeps working.
+    //
+    // demoplayback (the built-in demo1/2/3 lumps) is its own trap: replaying a
+    // recorded demo re-simulates a real level, so gamestate reads GS_LEVEL the
+    // whole time. Always stand fully down for it - never latch on it, never
+    // feed it input - so the attract loop plays out untouched, same as a human
+    // just watching real DOOM idle.
+    static boolean s_game_ever_started;
+    if (gamestate == GS_LEVEL && !demoplayback) {
+        s_game_ever_started = true;
+    }
+    if (demoplayback) {
+        release_all();
+        return;
+    }
     if (gamestate != GS_LEVEL) {
         release_all();
+        if (!s_game_ever_started) {
+            return;   // hands off - a human has to press something to start
+        }
         enter_down = !enter_down;
         post_key(KEY_ENTER, enter_down);
         return;

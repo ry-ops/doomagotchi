@@ -47,10 +47,9 @@ static void doom_task(void *arg)
     static char *argv[] = {
         "doomgeneric",
         "-iwad", IWAD_PATH,
-        "-warp", "1", "1",   // straight into E1M1 (skip title/demo for this test)
     };
 
-    ESP_LOGI(TAG, "doomgeneric_Create(%d, ...) argv: -iwad %s -warp 1 1",
+    ESP_LOGI(TAG, "doomgeneric_Create(%d, ...) argv: -iwad %s",
              (int)(sizeof(argv) / sizeof(argv[0])), IWAD_PATH);
 
     doomgeneric_Create(sizeof(argv) / sizeof(argv[0]), argv);
