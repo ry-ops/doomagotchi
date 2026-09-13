@@ -98,11 +98,36 @@ void DG_Init(void)
     kbd_m5kbd_start();   // official M5 Tab5 keyboard (A164, I2C 0x6D, HID mode)
 }
 
+// Small "who's driving" indicator: a solid block painted straight into DOOM's
+// own ARGB8888 screen buffer before the PPA blit - platform-layer compositing
+// on the buffer doomgeneric already hands us to display, not a touch of game
+// logic or vendored rendering code (ADR 0001). Green = autoplayer has the
+// wheel, amber = a human does (explicit TILDE disable, or standing down after
+// a real keypress).
+static void draw_driver_indicator(void)
+{
+    if (!DG_ScreenBuffer) {
+        return;
+    }
+    uint32_t color = (autoplay_current_driver() == AUTOPLAY_DRIVER_AUTO)
+                      ? 0xFF20C020u   // green
+                      : 0xFFE0A020u;  // amber
+    const int sz = 20, margin = 6;
+    for (int y = margin; y < margin + sz; y++) {
+        pixel_t *row = &DG_ScreenBuffer[y * DOOMGENERIC_RESX];
+        for (int x = margin; x < margin + sz; x++) {
+            row[x] = color;
+        }
+    }
+}
+
 void DG_DrawFrame(void)
 {
     if (!s_fb || !s_ppa) {
         return;
     }
+
+    draw_driver_indicator();
 
     // Hardware rotate + scale + XRGB8888->RGB565 via the PPA (the software path
     // was ~400 ms/frame from strided PSRAM reads). DG_ScreenBuffer is landscape

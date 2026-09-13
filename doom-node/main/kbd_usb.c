@@ -14,6 +14,7 @@
 #include "bsp/m5stack_tab5.h"
 #include "doomkeys.h"
 #include "kbd_usb.h"
+#include "autoplay.h"
 
 static const char *TAG = "kbd";
 
@@ -79,6 +80,26 @@ unsigned char kbd_hid_usage_to_doom(unsigned char uc)
     }
 }
 
+// The M5 Tab5 keyboard (A164) has no F-row, so the meta keys live on two
+// symbols kbd_hid_usage_to_doom() never maps to anything - confirmed free by
+// probing raw HID usage bytes over serial rather than guessing from a spec
+// sheet: TILDE (0x35) and the dedicated forward-DELETE key (0x4C, distinct
+// from HID_KEY_DEL/0x2A, which this SDK's naming actually uses for Backspace).
+bool kbd_hid_usage_meta(unsigned char uc, bool pressed)
+{
+    if (uc != HID_KEY_TILDE && uc != HID_KEY_DELETE) {
+        return false;
+    }
+    if (pressed) {
+        if (uc == HID_KEY_TILDE) {
+            autoplay_toggle_enabled();
+        } else {
+            autoplay_request_restart();
+        }
+    }
+    return true;   // swallow the release edge too - never reaches the engine
+}
+
 static void iface_cb(hid_host_device_handle_t dh,
                      const hid_host_interface_event_t event, void *arg)
 {
@@ -106,12 +127,14 @@ static void iface_cb(hid_host_device_handle_t dh,
 
     for (int i = 0; i < 6; i++) {
         if (prev[i] > HID_KEY_ERROR_UNDEFINED && !memchr(cur, prev[i], 6)) {
+            if (kbd_hid_usage_meta(prev[i], false)) { continue; }
             unsigned char k = kbd_hid_usage_to_doom(prev[i]);
             if (k) { q_push(0, k); }
         }
     }
     for (int i = 0; i < 6; i++) {
         if (cur[i] > HID_KEY_ERROR_UNDEFINED && !memchr(prev, cur[i], 6)) {
+            if (kbd_hid_usage_meta(cur[i], true)) { continue; }
             unsigned char k = kbd_hid_usage_to_doom(cur[i]);
             if (k) { q_push(1, k); }
         }

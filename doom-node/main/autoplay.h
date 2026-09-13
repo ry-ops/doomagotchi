@@ -17,3 +17,23 @@ void autoplay_note_human_key(void);
 
 // True while that hold-off is active (autoplay_step is a no-op).
 bool autoplay_suspended(void);
+
+// Explicit on/off latch, independent of the standdown timer above - a hard
+// override so the bot stays out of the way for as long as a human wants,
+// rather than clawing control back 5s after the last keypress. Flip it from a
+// dedicated meta key (TILDE); see kbd_usb.c / kbd_m5kbd.c.
+void autoplay_toggle_enabled(void);
+bool autoplay_is_enabled(void);
+
+// One-shot: type "idclev<episode><map>" for the level DOOM is on right now,
+// restarting it fresh (same mechanism as the iddqd/idkfa auto-cheats - never
+// touches game logic directly, per ADR 0001). Bound to a dedicated meta key
+// (the DELETE key). Runs unconditionally, independent of autoplay_is_enabled() /
+// autoplay_suspended(), so the hotkey works whoever currently has control.
+void autoplay_request_restart(void);
+
+// Who currently has the wheel, for the on-screen indicator in
+// doomgeneric_esp32p4.c. HUMAN covers both "explicitly disabled" and "standing
+// down after a real keypress"; AUTO is everything else.
+typedef enum { AUTOPLAY_DRIVER_AUTO, AUTOPLAY_DRIVER_HUMAN } autoplay_driver_t;
+autoplay_driver_t autoplay_current_driver(void);

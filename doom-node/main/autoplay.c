@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <limits.h>
 
 #include "esp_log.h"
@@ -63,6 +64,35 @@ void autoplay_note_human_key(void)
 bool autoplay_suspended(void)
 {
     return (esp_timer_get_time() - s_human_us) < HUMAN_HOLDOFF_US;
+}
+
+// --------------------------------------------------------- meta hotkeys ---
+
+static volatile bool s_enabled = true;
+static volatile bool s_restart_requested;
+
+void autoplay_toggle_enabled(void)
+{
+    s_enabled = !s_enabled;
+    ESP_LOGI(TAG, "autoplay %s (TILDE)", s_enabled ? "enabled" : "disabled");
+}
+
+bool autoplay_is_enabled(void)
+{
+    return s_enabled;
+}
+
+void autoplay_request_restart(void)
+{
+    s_restart_requested = true;
+}
+
+autoplay_driver_t autoplay_current_driver(void)
+{
+    if (!s_enabled || autoplay_suspended()) {
+        return AUTOPLAY_DRIVER_HUMAN;
+    }
+    return AUTOPLAY_DRIVER_AUTO;
 }
 
 // keys we hold; index order matches KEYS[] and want[] below
@@ -410,6 +440,46 @@ void autoplay_step(void)
     static uint32_t moved_tic;
 
     tic++;
+
+    // Meta: explicit "restart this level" request (DELETE, see kbd_usb.c). Runs on
+    // its own private one-shot typist, independent of autoplay_is_enabled() /
+    // autoplay_suspended() and of the autoplayer's own s_type cheat channel,
+    // so it always runs to completion once started - types "idclev<E><M>" for
+    // whatever level DOOM is on right now, the same mechanism ADR 0001 already
+    // uses for the iddqd/idkfa auto-cheats, never touching game logic directly.
+    static const char *s_restart_str;
+    static boolean s_restart_down;
+    static char s_restart_buf[32];   // "idclev" + worst-case %d%d + NUL
+    // Held pending (not dropped) until we're actually in a level to restart -
+    // e.g. DELETE pressed at the title screen/demo loop just waits for a real
+    // game to start, rather than silently doing nothing.
+    if (s_restart_requested && !s_restart_str && gamestate == GS_LEVEL && !demoplayback) {
+        snprintf(s_restart_buf, sizeof s_restart_buf, "idclev%d%d", gameepisode, gamemap);
+        s_restart_str = s_restart_buf;
+        s_restart_requested = false;
+        ESP_LOGI(TAG, "restarting E%dM%d (DELETE)", gameepisode, gamemap);
+    }
+    if (s_restart_str) {
+        if (!*s_restart_str) {
+            s_restart_str = NULL;
+        } else if (!s_restart_down) {
+            post_key((unsigned char)*s_restart_str, true);
+            s_restart_down = true;
+        } else {
+            post_key((unsigned char)*s_restart_str, false);
+            s_restart_down = false;
+            s_restart_str++;
+        }
+        return;
+    }
+
+    // Meta: explicit on/off latch (TILDE). A hard override on top of the standdown
+    // timer below - stays out of the way for as long as a human wants, not
+    // just 5s after the last keypress.
+    if (!s_enabled) {
+        release_all();
+        return;
+    }
 
     // Human at the keyboard within the last few seconds -> get out of the way
     // entirely: release our keys and post nothing, so cheat codes and manual

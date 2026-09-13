@@ -111,11 +111,11 @@ static void kb_task(void *arg)
             prev_mod = mod;
 
             if (kc != prev_kc) {
-                if (prev_kc) {
+                if (prev_kc && !kbd_hid_usage_meta(prev_kc, false)) {
                     unsigned char k = kbd_hid_usage_to_doom(prev_kc);
                     if (k) { q_push(0, k); }
                 }
-                if (kc) {
+                if (kc && !kbd_hid_usage_meta(kc, true)) {
                     unsigned char k = kbd_hid_usage_to_doom(kc);
                     if (k) { q_push(1, k); }
                 }
