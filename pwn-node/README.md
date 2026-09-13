@@ -64,7 +64,9 @@ this is passive-only, so nothing forces one.
 - [x] **SX1262 TX driver** — `lora.c`: hand-rolled SX126x command set, TX only.
       915.000 MHz, LoRa SF9 / BW 125 kHz / CR 4/5, explicit header + CRC,
       preamble 12, sync word `0x1424`, +14 dBm, 6-byte `struct dgm_event`
-      payload (~40 ms airtime). Shares the microSD SPI bus (`SPI2_HOST`,
+      payload (~140 ms airtime — matches the Semtech time-on-air formula for
+      SF9/BW125 almost exactly; the original "~40 ms" estimate here was just
+      wrong). Shares the microSD SPI bus (`SPI2_HOST`,
       SCK 40 / MOSI 14 / MISO 39) as a second `spi_device` on NSS 5; the SPI
       master driver serialises against the pcap writer task, no extra lock.
       RST 3, BUSY 6 polled; DIO1 4 left alone (we poll `GetIrqStatus`). TCXO on
@@ -76,9 +78,14 @@ this is passive-only, so nothing forces one.
       now also handed to `lora_send_event()`; the 5 s stats line reports
       `sent / timeouts / errs / last airtime`. A drop is just a monster that
       doesn't spawn (ADR 0003), so the send result is advisory.
-- [ ] **verify on hardware** — antenna confirmed attached; `lora_init()` keys a
-      probe packet and waits for TxDone. Needs the DOOM-node RX to see traffic.
-- [ ] **DOOM-node RX + spawn/kill glue** — the other half of Phase 3.
+- [x] **verify on hardware** — confirmed live on the bench (2026-09-13): probe
+      TX keys clean at boot, then sustained sends over a normal run —
+      `sent=56 timeouts=0 errs=0 last=151ms` on the 5 s stats line, zero SPI
+      errors, zero chip-side TX timeouts. Cardputer sensor side of Phase 3 is
+      done. Not yet checked: an actual receiver decoding the frames (needs the
+      DOOM-node RX below).
+- [ ] **DOOM-node RX + spawn/kill glue** — the other half of Phase 3, entirely
+      on the Tab5 side. Nothing here to do until that's picked up.
 
 ### Cardputer ADV gotcha — SD peripheral rails
 
