@@ -13,6 +13,23 @@ as the original — **not** id Software's commercial `DOOM.WAD`, which this repo
 ships or references. See [`CLAUDE.md`](./CLAUDE.md) for the full project brief and the
 non-negotiable constraints this repo is built under.
 
+## Hardware required
+
+**This project needs both devices. Neither one runs DOOMAGOTCHI by itself.**
+
+- **M5Stack Tab5** (ESP32-P4, 32 MB PSRAM) — runs DOOM. It has no radio of its own, so
+  with no sensor feeding it, it's just a Tab5 playing Freedoom with no RF-driven
+  spawns.
+- **M5Stack Cardputer Adv** (ESP32-S3, with the LoRa 1262 Cap) — does the RF capture.
+  It has no PSRAM and cannot run DOOM (see ADR 0001/0002 — a cut-down DOOM is
+  explicitly out of scope), so on its own it's a sensor with nothing to talk to.
+
+They're joined over sub-GHz LoRa (the Cardputer's SX1262 Cap module — **confirm it's
+the 915 MHz variant before transmitting**; M5 ships 868 MHz EU units too). Building
+and flashing only one side is a valid intermediate step (see each node's README), but
+the full DOOMAGOTCHI experience — APs spawning as monsters, handshakes as kills — only
+exists with both boards built, flashed, and powered on together.
+
 ## How it works
 
 - **`pwn-node`** (M5Stack Cardputer Adv, ESP32-S3) walks around and passively listens.
@@ -37,6 +54,31 @@ non-negotiable constraints this repo is built under.
 | WPA3-SAE                | Cacodemon     |
 | Hidden SSID              | Spectre       |
 | 802.1X / Enterprise      | Baron of Hell |
+
+## Cheat codes
+
+Because this is unmodified `doomgeneric` on real Freedoom (ADR 0001), every stock DOOM
+cheat works exactly as it does on any other port — nothing here reimplements or filters
+them. Type them on the Tab5's attached keyboard (M5 Tab5 Keyboard A164 or a USB HID
+keyboard); any physical keypress suspends the autoplayer for a few seconds so it
+doesn't fight you or eat the input, then it resumes on its own once you stop typing.
+
+| Cheat        | Effect                                   |
+|--------------|-------------------------------------------|
+| `iddqd`      | God mode                                   |
+| `idkfa`      | All weapons, keys, and full ammo           |
+| `idfa`       | All weapons and full ammo (no keys)        |
+| `idclip`     | No-clip / walk through walls               |
+| `idspispopd` | No-clip (Doom 1 alias of `idclip`)         |
+| `idbeholdv`  | Invulnerability                            |
+| `idbeholds`  | Berserk strength                           |
+| `idbeholdi`  | Partial invisibility                       |
+| `idbeholdr`  | Radiation suit                             |
+| `idbeholda`  | Full automap                               |
+| `idbeholdl`  | Light amplification goggles                |
+| `idclevXX`   | Warp to episode/map `XX` (e.g. `idclev11`) |
+| `idmusXX`    | Change music track                         |
+| `idchoppers` | Chainsaw + invulnerability                 |
 
 ## Repo layout
 
