@@ -7,7 +7,10 @@ nearby access points spawn as monsters; captured handshakes are kills; the
 end-of-session tally is a DOOM intermission screen.
 
 Two devices, joined over sub-GHz LoRa, running **actual DOOM** — not a clone, not a
-"DOOM-like." See [`CLAUDE.md`](./CLAUDE.md) for the full project brief and the
+"DOOM-like." It runs on the [Freedoom](https://freedoom.github.io/) Phase 1 IWAD, a
+free, MIT/GPL-compatible asset set with the same map layout and engine compatibility
+as the original — **not** id Software's commercial `DOOM.WAD`, which this repo never
+ships or references. See [`CLAUDE.md`](./CLAUDE.md) for the full project brief and the
 non-negotiable constraints this repo is built under.
 
 ## How it works
@@ -78,7 +81,7 @@ up-to-date log.
 
 ## Assets and legal
 
-Uses the [Freedoom](https://freedoom.github.io/) Phase 1 IWAD — never a commercial
+Uses the **[Freedoom](https://freedoom.github.io/) Phase 1 IWAD** — never a commercial
 `DOOM.WAD`. The sensor is **passive receive-only**: no deauthentication, no injection,
 no active attacks. It captures handshakes from ambient traffic it can already hear.
 This scope is intentional and non-negotiable; see `CLAUDE.md`.
